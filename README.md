@@ -1,30 +1,39 @@
 
 # Serverless XGBoost
 
-There are many ways that data scientists can contribute to the projects or companies they work with. Arguably, one of the biggest contributions that a data scientist can make is to deploy a model that makes inference in real-time on an online setting.
+-------------------------------------
+
+NOTE: 2020/10/10 Work in progress...
+
+-------------------------------------
+
+There are many ways that data scientists can contribute to the projects or companies they work with. Arguably, one of the biggest contributions that a data scientist can make is to deploy a model that makes inference in real-time on an online setting. 
 
 When it comes to deploying models, such as XGBoost models, there are various tools that allow you to achieve the same and ultimate goal: online inference. This tutorial will illustrate my favorite choice in the context of XGBoost, that consists of a small set of technologies easy to understand, very reliable, secure, scalable, and affordable.
 
 The reasons for me that made of this approach my favorite is mainly due to the following advantages:
 
-- There is no need to install any package in the production environment
+- There is no need to install any package in the production environment.
 - It is very affordable for all project sizes.
-- It is powered by cloud solutions that made it very scalable.
+- It is powered by cloud computing solutions that made it very scalable.
 
-# Fit and Deploy a XGBoost Binary Classifier.
+# Fit a XGBoost binary classifier and get scores with pure python code.
 
 ## Step 1: Fit a XGBoost Binary Classifier.
 
 In this section we'll fit a binary XGBoost classifier to the Breast Cancer dataset.
 
-In the dataset, we will artificially insert a few `NaN`. This will allow us to show that the pure python code correctly handles missing values. Also, we will use `pandas.DataFrame` so that the split nodes in the XGBoost trees contain the feature names, which will make our tree structure a bit more human readable.
-And last, we will use early stopping in order to show how to correctly fetch scores from the top-N trees.
+In the dataset, we will artificially insert a few `NaN` values. This will allow us to demonstrate the correct handlying of missing values by our pure python code. Also, our data will use `pandas.DataFrame` so that the split nodes in the XGBoost trees contain the feature names, which will make our tree structure a bit more human readable.
+And last, we will use early stopping in order to show how to correctly fetch scores from the top-N trees of the ensemble.
 
-The resulting model will be saved in JSON format insead to the classic pickle format. By saving the model as a JSON instead of Pickle format will allow us to skip the XGBoost instalation in our production setting.
+The resulting model will be saved in JSON format insead to the classic pickle format. By saving the model as a JSON instead of using Pickle format will allow us to skip the XGBoost instalation in our production setting.
+
+First read the data as a `pandas.DataFrame` and artificially insert a few `NaN` values.
 
 
 ```python
 import os
+import numpy as np
 import pandas as pd
 import xgboost as xgb
 import json
@@ -35,17 +44,26 @@ from sklearn.model_selection import train_test_split
 dataset = datasets.load_breast_cancer()
 X = pd.DataFrame(
     dataset.data,
-    columns=dataset.feature_names)
+    columns=[x.replace(' ', '_') for x in dataset.feature_names])
 y = dataset.target
+
+X.shape
 ```
+
+
+
+
+    (569, 30)
+
+
 
 
 ```python
 nan_count_original = X.isnull().sum().sum()
 for col in X.columns:
     X.loc[
-        X[col] <= X[col].quantile(.01),
-        col] = pd.np.nan
+        X[col] <= X[col].quantile(.3),
+        col] = np.nan
 nan_count_artificial = X.isnull().sum().sum()
 
 print('NaN values count in original dataset: %s' % nan_count_original)
@@ -53,21 +71,17 @@ print('NaN values count in artificial dataset: %s' % nan_count_artificial)
 ```
 
     NaN values count in original dataset: 0
-    NaN values count in artificial dataset: 222
+    NaN values count in artificial dataset: 5133
 
 
-    /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/ipykernel_launcher.py:5: FutureWarning: The pandas.np module is deprecated and will be removed from pandas in a future version. Import numpy directly instead
-      """
-
+Then train a xgboost model using early stopping.
 
 
 ```python
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.1, random_state=42)
+    X, y, test_size=0.3, random_state=0)
 
-model = xgb.XGBClassifier(
-    n_estimators=500,
-    learning_rate=.001)
+model = xgb.XGBClassifier(n_estimators=500)
 
 model.fit(
     X_train, y_train,
@@ -75,35 +89,42 @@ model.fit(
     eval_set=[(X_test, y_test)])
 ```
 
-    [0]	validation_0-error:0.070175
+    [0]	validation_0-error:0.052632
     Will train until validation_0-error hasn't improved in 10 rounds.
-    [1]	validation_0-error:0.070175
-    [2]	validation_0-error:0.070175
-    [3]	validation_0-error:0.070175
-    [4]	validation_0-error:0.070175
-    [5]	validation_0-error:0.070175
-    [6]	validation_0-error:0.070175
-    [7]	validation_0-error:0.070175
-    [8]	validation_0-error:0.070175
-    [9]	validation_0-error:0.070175
-    [10]	validation_0-error:0.070175
+    [1]	validation_0-error:0.052632
+    [2]	validation_0-error:0.052632
+    [3]	validation_0-error:0.052632
+    [4]	validation_0-error:0.040936
+    [5]	validation_0-error:0.052632
+    [6]	validation_0-error:0.040936
+    [7]	validation_0-error:0.052632
+    [8]	validation_0-error:0.046784
+    [9]	validation_0-error:0.064327
+    [10]	validation_0-error:0.052632
+    [11]	validation_0-error:0.064327
+    [12]	validation_0-error:0.05848
+    [13]	validation_0-error:0.064327
+    [14]	validation_0-error:0.064327
     Stopping. Best iteration:
-    [0]	validation_0-error:0.070175
-
+    [4]	validation_0-error:0.040936
+    
 
 
 
 
 
     XGBClassifier(base_score=0.5, booster='gbtree', colsample_bylevel=1,
-           colsample_bynode=1, colsample_bytree=1, gamma=0,
-           learning_rate=0.001, max_delta_step=0, max_depth=3,
-           min_child_weight=1, missing=None, n_estimators=500, n_jobs=1,
-           nthread=None, objective='binary:logistic', random_state=0,
-           reg_alpha=0, reg_lambda=1, scale_pos_weight=1, seed=None,
-           silent=None, subsample=1, verbosity=1)
+           colsample_bynode=1, colsample_bytree=1, gamma=0, learning_rate=0.1,
+           max_delta_step=0, max_depth=3, min_child_weight=1, missing=None,
+           n_estimators=500, n_jobs=1, nthread=None,
+           objective='binary:logistic', random_state=0, reg_alpha=0,
+           reg_lambda=1, scale_pos_weight=1, seed=None, silent=None,
+           subsample=1, verbosity=1)
 
 
+
+Once trained, save the model in JSON format. 
+In our case we have cloned this repository in the following path: `'~/chalice_xgboost/'`, and therefore, the path where we'll like to save the model dump is in the `chalicelib/models/` folder.
 
 
 ```python
@@ -113,7 +134,7 @@ MODEL_FOLDER_PATH = os.path.expanduser(
 MODEL_FILE_PATH = os.path.join(
     MODEL_FOLDER_PATH, 'xgb.json')
 
-# Make folder path
+# Make folder path if it does not exists.
 os.makedirs(
     MODEL_FOLDER_PATH,
     exist_ok=True)
@@ -122,29 +143,31 @@ os.makedirs(
 model._Booster.dump_model(
     MODEL_FILE_PATH,
     dump_format='json')
+```
 
-# Open file just keep the best n-trees.
+In the previous step, we had saved the entire ensemble of trees, however, by fetching scores manually we will only need the top best n-trees chose by the early-stopping feature. As the entire ensemble can be found in the json dump, we'll remove the unnecesary trees by loading the model ensemble and re-writing the file.
+
+
+```python
+# Load the model dump.
 with open(MODEL_FILE_PATH, 'r') as f:
     model_json = json.loads(f.read())
 print('Number of trees: %s' % len(model_json))
 
+# Subset the ensemple to the best n-trees.
 model_json = model_json[:model.best_ntree_limit]
 print('Number of top-n best trees: %s' % len(model_json))
 
+# Rewrite the dump with only the best n-trees.
 with open(MODEL_FILE_PATH, 'w') as f:
     f.write(json.dumps(model_json))
 ```
 
-    Number of trees: 11
-    Number of top-n best trees: 1
+    Number of trees: 15
+    Number of top-n best trees: 5
 
 
-
-```python
-
-```
-
-Bellow we show how the JSON dump of trees
+Finally, bellow we show how the JSON dump of 2 trees:
 
 
 ```python
@@ -156,70 +179,296 @@ model_json
 
     [{'nodeid': 0,
       'depth': 0,
-      'split': 'mean concave points',
-      'split_condition': 0.0512799993,
+      'split': 'worst_concave_points',
+      'split_condition': 0.142349988,
       'yes': 1,
       'no': 2,
       'missing': 1,
       'children': [{'nodeid': 1,
         'depth': 1,
-        'split': 'worst radius',
-        'split_condition': 16.8299999,
+        'split': 'worst_radius',
+        'split_condition': 17.6149998,
         'yes': 3,
         'no': 4,
         'missing': 3,
         'children': [{'nodeid': 3,
           'depth': 2,
-          'split': 'radius error',
-          'split_condition': 0.572100043,
+          'split': 'area_error',
+          'split_condition': 35.2600021,
           'yes': 7,
           'no': 8,
           'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.00191752589},
-           {'nodeid': 8, 'leaf': 0}]},
+          'children': [{'nodeid': 7, 'leaf': 0.189830512},
+           {'nodeid': 8, 'leaf': 0.0545454584}]},
          {'nodeid': 4,
           'depth': 2,
-          'split': 'mean texture',
-          'split_condition': 18.6800003,
+          'split': 'mean_texture',
+          'split_condition': 19.1650009,
           'yes': 9,
           'no': 10,
-          'missing': 10,
-          'children': [{'nodeid': 9, 'leaf': 0.00100000005},
-           {'nodeid': 10, 'leaf': -0.00125000009}]}]},
+          'missing': 9,
+          'children': [{'nodeid': 9, 'leaf': 0},
+           {'nodeid': 10, 'leaf': -0.138461545}]}]},
        {'nodeid': 2,
         'depth': 1,
-        'split': 'worst concave points',
-        'split_condition': 0.14655,
+        'split': 'worst_perimeter',
+        'split_condition': 97.4900055,
         'yes': 5,
         'no': 6,
-        'missing': 6,
-        'children': [{'nodeid': 5,
+        'missing': 5,
+        'children': [{'nodeid': 5, 'leaf': 0.0181818195},
+         {'nodeid': 6,
           'depth': 2,
-          'split': 'worst perimeter',
-          'split_condition': 115.25,
+          'split': 'radius_error',
+          'split_condition': 5.74600077,
           'yes': 11,
           'no': 12,
           'missing': 12,
-          'children': [{'nodeid': 11, 'leaf': 0.00106666679},
-           {'nodeid': 12, 'leaf': -0.00155555562}]},
+          'children': [{'nodeid': 11, 'leaf': -0.190400004},
+           {'nodeid': 12, 'leaf': -0.0545454584}]}]}]},
+     {'nodeid': 0,
+      'depth': 0,
+      'split': 'worst_concave_points',
+      'split_condition': 0.142349988,
+      'yes': 1,
+      'no': 2,
+      'missing': 1,
+      'children': [{'nodeid': 1,
+        'depth': 1,
+        'split': 'worst_radius',
+        'split_condition': 17.6149998,
+        'yes': 3,
+        'no': 4,
+        'missing': 3,
+        'children': [{'nodeid': 3,
+          'depth': 2,
+          'split': 'area_error',
+          'split_condition': 35.2600021,
+          'yes': 7,
+          'no': 8,
+          'missing': 7,
+          'children': [{'nodeid': 7, 'leaf': 0.172745794},
+           {'nodeid': 8, 'leaf': 0.0501142256}]},
+         {'nodeid': 4,
+          'depth': 2,
+          'split': 'mean_texture',
+          'split_condition': 19.1650009,
+          'yes': 9,
+          'no': 10,
+          'missing': 9,
+          'children': [{'nodeid': 9, 'leaf': 0},
+           {'nodeid': 10, 'leaf': -0.129318759}]}]},
+       {'nodeid': 2,
+        'depth': 1,
+        'split': 'worst_perimeter',
+        'split_condition': 97.4900055,
+        'yes': 5,
+        'no': 6,
+        'missing': 5,
+        'children': [{'nodeid': 5, 'leaf': 0.0170257203},
          {'nodeid': 6,
           'depth': 2,
-          'split': 'concavity error',
-          'split_condition': 0.112849995,
+          'split': 'area_error',
+          'split_condition': 21.9449997,
+          'yes': 11,
+          'no': 12,
+          'missing': 11,
+          'children': [{'nodeid': 11, 'leaf': -0.0499064028},
+           {'nodeid': 12, 'leaf': -0.173635662}]}]}]},
+     {'nodeid': 0,
+      'depth': 0,
+      'split': 'mean_concave_points',
+      'split_condition': 0.0489199981,
+      'yes': 1,
+      'no': 2,
+      'missing': 1,
+      'children': [{'nodeid': 1,
+        'depth': 1,
+        'split': 'area_error',
+        'split_condition': 42.1900024,
+        'yes': 3,
+        'no': 4,
+        'missing': 3,
+        'children': [{'nodeid': 3,
+          'depth': 2,
+          'split': 'worst_radius',
+          'split_condition': 17.2950001,
+          'yes': 7,
+          'no': 8,
+          'missing': 7,
+          'children': [{'nodeid': 7, 'leaf': 0.162387654},
+           {'nodeid': 8, 'leaf': 0.0214837175}]},
+         {'nodeid': 4, 'leaf': -0.0442601293}]},
+       {'nodeid': 2,
+        'depth': 1,
+        'split': 'worst_perimeter',
+        'split_condition': 104.100006,
+        'yes': 5,
+        'no': 6,
+        'missing': 5,
+        'children': [{'nodeid': 5,
+          'depth': 2,
+          'split': 'worst_concave_points',
+          'split_condition': 0.172450006,
+          'yes': 9,
+          'no': 10,
+          'missing': 10,
+          'children': [{'nodeid': 9, 'leaf': 0.122566067},
+           {'nodeid': 10, 'leaf': -0.107704416}]},
+         {'nodeid': 6,
+          'depth': 2,
+          'split': 'worst_concavity',
+          'split_condition': 0.222950011,
+          'yes': 11,
+          'no': 12,
+          'missing': 12,
+          'children': [{'nodeid': 11, 'leaf': 0.0192245375},
+           {'nodeid': 12, 'leaf': -0.161969319}]}]}]},
+     {'nodeid': 0,
+      'depth': 0,
+      'split': 'mean_concave_points',
+      'split_condition': 0.0489199981,
+      'yes': 1,
+      'no': 2,
+      'missing': 1,
+      'children': [{'nodeid': 1,
+        'depth': 1,
+        'split': 'area_error',
+        'split_condition': 42.1900024,
+        'yes': 3,
+        'no': 4,
+        'missing': 3,
+        'children': [{'nodeid': 3,
+          'depth': 2,
+          'split': 'worst_perimeter',
+          'split_condition': 113.75,
+          'yes': 7,
+          'no': 8,
+          'missing': 7,
+          'children': [{'nodeid': 7, 'leaf': 0.151806206},
+           {'nodeid': 8, 'leaf': 0.01741031}]},
+         {'nodeid': 4, 'leaf': -0.0412366688}]},
+       {'nodeid': 2,
+        'depth': 1,
+        'split': 'worst_perimeter',
+        'split_condition': 104.100006,
+        'yes': 5,
+        'no': 6,
+        'missing': 5,
+        'children': [{'nodeid': 5,
+          'depth': 2,
+          'split': 'worst_concave_points',
+          'split_condition': 0.172450006,
+          'yes': 9,
+          'no': 10,
+          'missing': 10,
+          'children': [{'nodeid': 9, 'leaf': 0.11439874},
+           {'nodeid': 10, 'leaf': -0.102243774}]},
+         {'nodeid': 6,
+          'depth': 2,
+          'split': 'mean_texture',
+          'split_condition': 67.1200027,
+          'yes': 11,
+          'no': 12,
+          'missing': 12,
+          'children': [{'nodeid': 11, 'leaf': -0.156740174},
+           {'nodeid': 12, 'leaf': -0.0323793478}]}]}]},
+     {'nodeid': 0,
+      'depth': 0,
+      'split': 'worst_concave_points',
+      'split_condition': 0.142349988,
+      'yes': 1,
+      'no': 2,
+      'missing': 1,
+      'children': [{'nodeid': 1,
+        'depth': 1,
+        'split': 'worst_perimeter',
+        'split_condition': 107.599998,
+        'yes': 3,
+        'no': 4,
+        'missing': 3,
+        'children': [{'nodeid': 3,
+          'depth': 2,
+          'split': 'area_error',
+          'split_condition': 46.7900009,
+          'yes': 7,
+          'no': 8,
+          'missing': 7,
+          'children': [{'nodeid': 7, 'leaf': 0.143411368},
+           {'nodeid': 8, 'leaf': 0.0141552528}]},
+         {'nodeid': 4,
+          'depth': 2,
+          'split': 'mean_texture',
+          'split_condition': 24.9850006,
+          'yes': 9,
+          'no': 10,
+          'missing': 10,
+          'children': [{'nodeid': 9, 'leaf': -0.0954347849},
+           {'nodeid': 10, 'leaf': 0.0930837914}]}]},
+       {'nodeid': 2,
+        'depth': 1,
+        'split': 'area_error',
+        'split_condition': 21.9449997,
+        'yes': 5,
+        'no': 6,
+        'missing': 5,
+        'children': [{'nodeid': 5,
+          'depth': 2,
+          'split': 'worst_texture',
+          'split_condition': 28.5450001,
+          'yes': 11,
+          'no': 12,
+          'missing': 11,
+          'children': [{'nodeid': 11, 'leaf': 0.0831701383},
+           {'nodeid': 12, 'leaf': -0.105434693}]},
+         {'nodeid': 6,
+          'depth': 2,
+          'split': 'concavity_error',
+          'split_condition': 0.113665,
           'yes': 13,
           'no': 14,
           'missing': 14,
-          'children': [{'nodeid': 13, 'leaf': -0.00192546588},
-           {'nodeid': 14, 'leaf': 0}]}]}]}]
+          'children': [{'nodeid': 13, 'leaf': -0.146517023},
+           {'nodeid': 14, 'leaf': -0.00667759869}]}]}]}]
 
+
+
+The structure above is pretty simple. It consist of a `list` of python `dict`s, where each item of the list corresponds to a single tree. Each tree is composed of and initial node, and each node may have other nested nodes, that can be found under the `children` dictionary key. The keys: `split` and `split_condition`, are the feature-name and feature-value of the split condition respectively, the split value and condition is the node split you tipically find on trees diagrams of most tree-based methods. A final node, that has no further childre, correspond to a leaf node, that has a `leaf` value, which is some sort of a fraction of the models prediction score.
+
+In the cell bellow, we illustrate the first tree by its tree diagram, where you can corroborate the correctness of the structure above.
+
+
+```python
+from xgboost import plot_tree
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(1, 1, figsize=(18, 10))
+ax = plot_tree(
+    model, 
+    num_trees=1, 
+    ax=ax)
+```
+
+    In /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/matplotlib/mpl-data/stylelib/_classic_test.mplstyle: 
+    The text.latex.unicode rcparam was deprecated in Matplotlib 3.0 and will be removed in 3.2.
+    In /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/matplotlib/mpl-data/stylelib/_classic_test.mplstyle: 
+    The savefig.frameon rcparam was deprecated in Matplotlib 3.1 and will be removed in 3.3.
+    In /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/matplotlib/mpl-data/stylelib/_classic_test.mplstyle: 
+    The pgf.debug rcparam was deprecated in Matplotlib 3.0 and will be removed in 3.2.
+    In /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/matplotlib/mpl-data/stylelib/_classic_test.mplstyle: 
+    The verbose.level rcparam was deprecated in Matplotlib 3.1 and will be removed in 3.3.
+    In /Users/lsanchez/anaconda3/envs/py37/lib/python3.7/site-packages/matplotlib/mpl-data/stylelib/_classic_test.mplstyle: 
+    The verbose.fileo rcparam was deprecated in Matplotlib 3.1 and will be removed in 3.3.
 
 
 ## **Step 2**: Get model scores from the model json dump.
 
-The following two methods will allow us to fetch model scores.
+In this section we describe two methods that will allow us to fetch model scores with pure python code.
 
-The first method, namely `get_tree_leaf()` will allow us to fetch a single tree leaf score value.
-And the second method: `binary_predict_proba()` will allow us to iteratively fetch model scores, sum them up and get the final probability score.
+The first method, namely `get_tree_leaf()` allow us to fetch a single tree leaf score value.
+And the second method: `binary_predict_proba()` allow us to iteratively fetch model scores, sum them up and get the final probability score.
+
+Both methods are well documented, feel free to take your time to understand the logic, which is pretty straigh forward.
 
 
 ```python
@@ -227,17 +476,17 @@ import math
 
 def get_tree_leaf(node, x):
     """Get tree leaf score.
-
+    
     Each node contains childres that are composed of aditiona nodes.
     Final nodes with no children are the leaves.
-
+    
     Parameters
     -----------
     node: dict.
         Node XGB dictionary.
     x: dict.
         Dictionary containing feature names and feature values.
-
+    
     Return
     -------
     score: float.
@@ -271,21 +520,21 @@ def get_tree_leaf(node, x):
 
 def binary_predict_proba(x, model_json):
     """Get score of a binary xgboost classifier.
-
+    
     Parameters
     ----------
     x: dict.
         Dictionary containing feature names and feature values.
-
+    
     model_json: dict.
         Dump of xgboost trees as json.
-
+    
     Returns
     -------
     y_score: list
         Scores of the negative and positve class.
     """
-
+    
     # Get tree leafs.
     tree_leaf_scores = []
     for tree in model_json:
@@ -296,17 +545,17 @@ def binary_predict_proba(x, model_json):
 
     # Get logits.
     logit = sum(tree_leaf_scores)
-
+    
     # Compute logistic function
     pos_class_probability = 1 / (1 + math.exp(-logit))
 
     # Get negative and positive class probabilities.
     y_score = [1 - pos_class_probability, pos_class_probability]
-
+    
     return y_score
 ```
 
-Manually get model scores from the JSON dump.
+And now, this simple lines of code show the scores obtained using pure python code and the model json dump.
 
 
 ```python
@@ -326,16 +575,16 @@ y_scores_json.head()
 
 
 
-    0    0.500479
-    1    0.499519
-    2    0.499519
-    3    0.500479
-    4    0.500479
+    0    0.303801
+    1    0.694275
+    2    0.694275
+    3    0.694275
+    4    0.694275
     dtype: float64
 
 
 
-Get model scores via `xgboost.XGBClassifier` object
+The scores obtained manully and comparable to the scores obtained from the `xgboost.XGBClassifier` model, as shown bellow:
 
 
 ```python
@@ -349,28 +598,145 @@ y_scores_model.head()
 
 
 
-    0    0.500479
-    1    0.499519
-    2    0.499519
-    3    0.500479
-    4    0.500479
+    0    0.303801
+    1    0.694275
+    2    0.694275
+    3    0.694275
+    4    0.694275
     dtype: float32
 
 
 
+Test the correctness of the score in the prescense of `NaN` values:
+
+
+```python
+x_nan = pd.DataFrame(
+    [[np.nan for _ in X.columns]],
+    columns=X.columns)
+x_nan
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>mean_radius</th>
+      <th>mean_texture</th>
+      <th>mean_perimeter</th>
+      <th>mean_area</th>
+      <th>mean_smoothness</th>
+      <th>mean_compactness</th>
+      <th>mean_concavity</th>
+      <th>mean_concave_points</th>
+      <th>mean_symmetry</th>
+      <th>mean_fractal_dimension</th>
+      <th>...</th>
+      <th>worst_radius</th>
+      <th>worst_texture</th>
+      <th>worst_perimeter</th>
+      <th>worst_area</th>
+      <th>worst_smoothness</th>
+      <th>worst_compactness</th>
+      <th>worst_concavity</th>
+      <th>worst_concave_points</th>
+      <th>worst_symmetry</th>
+      <th>worst_fractal_dimension</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>...</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+<p>1 rows × 30 columns</p>
+</div>
+
+
+
+
+```python
+binary_predict_proba(x_nan.iloc[0].to_dict(), model_json)[1]
+```
+
+
+
+
+    0.6942748733787976
+
+
+
+
+```python
+model.predict_proba(x_nan)[0, 1]
+```
+
+
+
+
+    0.69427484
+
+
+
+## Conclusion
 In this section we have show how to create a XGBoost model, saved it as a JSON set of trees and how to get model probabilities scores using pure python code.
 
 # Step 3: Use Chalice to deploy your model.
 
-In this section, we will use Chalice in order to deploy our serverless infrastructure in AWS. You will first need to set up your AWS credentials as shown in the following [link](https://github.com/aws/chalice). Once your AWS account and your credentials are all in place, we will only need to:
+In this section, we will use Chalice in order to deploy our serverless infrastructure in AWS. 
+
+(NOTE: Explain what is Chalice)
+
+You will first need to set up your AWS credentials as shown in the following [link](https://chalice.readthedocs.io/en/stable/quickstart.html#credentials), if it is your first time using AWS, don't worry, you'll basically have to create an account and get some credentials in order for you being able to take control of the cloud solutions provided by AWS programatillay.
+
+Once your AWS account and your credentials are all in place, we will only need to:
 
 - Create a new python environment and install the `chalice` package.
-- Clone the minimalist chalice project that contains our XGboost model dump.
+- Clone the repository.
 - Local test and deploy to production.
 
 ## Create a new python environment and install the `chalice` package.
 
-First, create the python environment. You can use your favorite environment management tool, in this example I'll use conda:
+First, create a python environment. You can use your favorite environment management tool, in this example I'll use conda:
 ```
 $ conda create --name chalice_xgboost python=3.7.3
 $ conda activate chalice_xgboost
@@ -382,60 +748,103 @@ Then install chalice package:
 (chalice_xgboost) $ pip install chalice
 ```
 
-With all set-up, we'll go straight and clone a GitHub project in which we already have all set-up for you in order to be able to best show a minimalistic example of how to get model scores.
+## Clone the repository.
 
+In this section we'll clone the chalice project that contains our XGboost model dump, and place the terminal under the folder `chalice_xgboost`:
 
-## Clone the minimalist chalice project that contains our XGboost model dump.
-```
+``` 
 (chalice_xgboost) $ git clone git@github.com:RaulSanchezVazquez/chalice_xgboost.git
+(chalice_xgboost) $ cd chalice_xgboost
+```
+
+(NOTE: Explain the folders)
+```
+(chalice_xgboost) chalice_xgboost $ ls
+README.ipynb README.md    app.py       chalicelib   models
 ```
 
 ## Local test and deploy to production.
+
+Run locally the server:
+
 ```
-(chalice_xgboost) LuisSanchez-MBP:chalice_xgb lsanchez$ chalice local
+(chalice_xgboost) chalice_xgboost $ chalice local
 Serving on http://127.0.0.1:8000
 ```
 
+The `app.py` file 
 
 
 ```python
-x = X_test.iloc[9].to_dict()
+# Get model score.
+@app.route('/predict_proba', methods=['POST'])
+def get_decision():
+    """Get model score.
+    """
+    # Get body
+    body = app.current_request.json_body
+
+    # Get features from the request
+    x = body['x']
+    log.LOGGER_.info('x: %s' % x)
+
+    # Load the model.
+    model_json = model.get()
+    log.LOGGER_.info('Model loaded: %s Trees' % len(model_json))
+
+    # Get decision thresholds.
+    y_score = xgb.binary_predict_proba(x, model_json)
+    log.LOGGER_.info('y_score: %s' % y_score)
+
+    # Get response
+    response = {'y_score': y_score}
+    log.LOGGER_.info('response: %s' % response)
+
+    return {'response': response}
+```
+
+
+With the server running locally, send a POST http request, and fetch the score:
+
+
+```python
+x = X_test.iloc[0].to_dict()
 x
 ```
 
 
 
 
-    {'mean radius': 13.9,
-     'mean texture': 16.62,
-     'mean perimeter': 88.97,
-     'mean area': 599.4,
-     'mean smoothness': nan,
-     'mean compactness': 0.05319,
-     'mean concavity': 0.02224,
-     'mean concave points': 0.01339,
-     'mean symmetry': 0.1813,
-     'mean fractal dimension': 0.05536,
-     'radius error': 0.1555,
-     'texture error': 0.5762,
-     'perimeter error': 1.392,
-     'area error': 14.03,
-     'smoothness error': 0.003308,
-     'compactness error': 0.01315,
-     'concavity error': 0.009904,
-     'concave points error': 0.004832,
-     'symmetry error': 0.01316,
-     'fractal dimension error': 0.002095,
-     'worst radius': 15.14,
-     'worst texture': 21.8,
-     'worst perimeter': 101.2,
-     'worst area': 718.9,
-     'worst smoothness': 0.09384,
-     'worst compactness': 0.2006,
-     'worst concavity': 0.1384,
-     'worst concave points': 0.06222,
-     'worst symmetry': 0.2679,
-     'worst fractal dimension': 0.07698}
+    {'mean_radius': 13.4,
+     'mean_texture': 20.52,
+     'mean_perimeter': 88.64,
+     'mean_area': 556.7,
+     'mean_smoothness': 0.1106,
+     'mean_compactness': 0.1469,
+     'mean_concavity': 0.1445,
+     'mean_concave_points': 0.08172,
+     'mean_symmetry': 0.2116,
+     'mean_fractal_dimension': 0.07325,
+     'radius_error': 0.3906,
+     'texture_error': 0.9306,
+     'perimeter_error': 3.093,
+     'area_error': 33.67,
+     'smoothness_error': nan,
+     'compactness_error': 0.02265,
+     'concavity_error': 0.03452,
+     'concave_points_error': 0.01334,
+     'symmetry_error': 0.01705,
+     'fractal_dimension_error': 0.004005,
+     'worst_radius': 16.41,
+     'worst_texture': 29.66,
+     'worst_perimeter': 113.3,
+     'worst_area': 844.4,
+     'worst_smoothness': 0.1574,
+     'worst_compactness': 0.3856,
+     'worst_concavity': 0.5106,
+     'worst_concave_points': 0.2051,
+     'worst_symmetry': 0.3585,
+     'worst_fractal_dimension': 0.1109}
 
 
 
@@ -466,7 +875,7 @@ response
 
 
 
-    {'response': {'y_score': [0.4995206186743867, 0.5004793813256133]}}
+    {'response': {'y_score': [0.6961988994898333, 0.30380110051016673]}}
 
 
 
