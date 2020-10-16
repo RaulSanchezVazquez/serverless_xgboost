@@ -1,34 +1,42 @@
 
+2020/10/15
+
+-------------------------------------
 # Serverless XGBoost
-
--------------------------------------
-
-NOTE: 2020/10/10 Work in progress...
-
--------------------------------------
 
 There are many ways that data scientists can contribute to the projects or companies they work with. Arguably, one of the biggest contributions that a data scientist can make is to deploy a model that makes inference in real-time on an online setting. 
 
-When it comes to deploying models, such as XGBoost models, there are various tools that allow you to achieve the same and ultimate goal: online inference. This tutorial will illustrate my favorite choice in the context of XGBoost, that consists of a small set of technologies easy to understand, very reliable, secure, scalable, and affordable.
+When it comes to deploying models, such as XGBoost models, there are various tools that allow you to achieve the same and ultimate goal: online inference. This tutorial will illustrate my favorite choice in the context of XGBoost.
 
-The reasons for me that made of this approach my favorite is mainly due to the following advantages:
+In this tutorial, we'll show how to deploy a XGBoost model using technologies with a low learning curve, very reliable, secure, scalable, and affordable.
+
+The reasons for me that made of this approach the one that best suits my use cases as a Data Scientist, is due to the following advantages:
 
 - There is no need to install any package in the production environment.
 - It is very affordable for all project sizes.
 - It is powered by cloud computing solutions that made it very scalable.
 
-# Fit a XGBoost binary classifier and get scores with pure python code.
+## Summary
 
-## Step 1: Fit a XGBoost Binary Classifier.
+In Section 1 we'll show how to train a XGBoost model and how to save it in JSON format.
+
+In Section 2, we'll show how to deploy the JSON model to a production environment.
+
+Finally, in Section 3 we show how this approach is scalable and affordable.
+
+
+# Section 1: Fit a XGBoost binary classifier and get scores with pure python code.
 
 In this section we'll fit a binary XGBoost classifier to the Breast Cancer dataset.
 
-In the dataset, we will artificially insert a few `NaN` values. This will allow us to demonstrate the correct handlying of missing values by our pure python code. Also, our data will use `pandas.DataFrame` so that the split nodes in the XGBoost trees contain the feature names, which will make our tree structure a bit more human readable.
-And last, we will use early stopping in order to show how to correctly fetch scores from the top-N trees of the ensemble.
+In the dataset, we will artificially insert a few `NaN` values. This will allow us to demonstrate the correct handlying of missing values by our pure python code. Also, our training data matrix will be composed of a `pandas.DataFrame`, this is desirable in order for the split nodes in the XGBoost trees contain the feature names, which will make our tree structure a bit more human readable.
+
+We'll train our model using early stopping in order to show how to correctly fetch scores from the top-N trees of the ensemble.
 
 The resulting model will be saved in JSON format insead to the classic pickle format. By saving the model as a JSON instead of using Pickle format will allow us to skip the XGBoost instalation in our production setting.
 
-First read the data as a `pandas.DataFrame` and artificially insert a few `NaN` values.
+## Step 1: Fit a XGBoost Binary Classifier.
+First read the data as a `pandas.DataFrame`:
 
 
 ```python
@@ -57,6 +65,8 @@ X.shape
 
 
 
+Then insert a few `NaN` values (this is done solely to demonstrate the correct handlying of missing values):
+
 
 ```python
 nan_count_original = X.isnull().sum().sum()
@@ -74,7 +84,7 @@ print('NaN values count in artificial dataset: %s' % nan_count_artificial)
     NaN values count in artificial dataset: 5133
 
 
-Then train a xgboost model using early stopping.
+Then train a xgboost model using early stopping:
 
 
 ```python
@@ -124,7 +134,7 @@ model.fit(
 
 
 Once trained, save the model in JSON format. 
-In our case we have cloned this repository in the following path: `'~/chalice_xgboost/'`, and therefore, the path where we'll like to save the model dump is in the `chalicelib/models/` folder.
+In our case we have cloned this repository in the following path: `'~/chalice_xgboost/'`, and therefore, the path where we'll like to save the model dump is in the `~/chalice/chalicelib/models/` folder.
 
 
 ```python
@@ -145,7 +155,7 @@ model._Booster.dump_model(
     dump_format='json')
 ```
 
-In the previous step, we had saved the entire ensemble of trees, however, by fetching scores manually we will only need the top best n-trees chose by the early-stopping feature. As the entire ensemble can be found in the json dump, we'll remove the unnecesary trees by loading the model ensemble and re-writing the file.
+In the previous step, we had saved the entire ensemble of trees, however, by fetching scores manually we will only need the top best n-trees chose by the early-stopping feature. As the entire ensemble can be found in the json dump, we'll remove the unnecesary trees. This is done by loading the model ensemble, subset the desired numbers of trees, and overwriting the file where the model was saved:
 
 
 ```python
@@ -158,7 +168,7 @@ print('Number of trees: %s' % len(model_json))
 model_json = model_json[:model.best_ntree_limit]
 print('Number of top-n best trees: %s' % len(model_json))
 
-# Rewrite the dump with only the best n-trees.
+# Overwrite the dump with only the best n-trees.
 with open(MODEL_FILE_PATH, 'w') as f:
     f.write(json.dumps(model_json))
 ```
@@ -167,278 +177,78 @@ with open(MODEL_FILE_PATH, 'w') as f:
     Number of top-n best trees: 5
 
 
-Finally, bellow we show how the JSON dump of 2 trees:
+The structure of the model ensemble of trees is pretty simple. It consist of a `list` of python `dict`s, where each item on the list corresponds to a single tree. Bellow can be found the first tree in the ensemble, in order for you to get familiar with the structure:
 
 
 ```python
-model_json
+model_json[0]
 ```
 
 
 
 
-    [{'nodeid': 0,
-      'depth': 0,
-      'split': 'worst_concave_points',
-      'split_condition': 0.142349988,
-      'yes': 1,
-      'no': 2,
-      'missing': 1,
-      'children': [{'nodeid': 1,
-        'depth': 1,
-        'split': 'worst_radius',
-        'split_condition': 17.6149998,
-        'yes': 3,
-        'no': 4,
-        'missing': 3,
-        'children': [{'nodeid': 3,
-          'depth': 2,
-          'split': 'area_error',
-          'split_condition': 35.2600021,
-          'yes': 7,
-          'no': 8,
-          'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.189830512},
-           {'nodeid': 8, 'leaf': 0.0545454584}]},
-         {'nodeid': 4,
-          'depth': 2,
-          'split': 'mean_texture',
-          'split_condition': 19.1650009,
-          'yes': 9,
-          'no': 10,
-          'missing': 9,
-          'children': [{'nodeid': 9, 'leaf': 0},
-           {'nodeid': 10, 'leaf': -0.138461545}]}]},
-       {'nodeid': 2,
-        'depth': 1,
-        'split': 'worst_perimeter',
-        'split_condition': 97.4900055,
-        'yes': 5,
-        'no': 6,
-        'missing': 5,
-        'children': [{'nodeid': 5, 'leaf': 0.0181818195},
-         {'nodeid': 6,
-          'depth': 2,
-          'split': 'radius_error',
-          'split_condition': 5.74600077,
-          'yes': 11,
-          'no': 12,
-          'missing': 12,
-          'children': [{'nodeid': 11, 'leaf': -0.190400004},
-           {'nodeid': 12, 'leaf': -0.0545454584}]}]}]},
-     {'nodeid': 0,
-      'depth': 0,
-      'split': 'worst_concave_points',
-      'split_condition': 0.142349988,
-      'yes': 1,
-      'no': 2,
-      'missing': 1,
-      'children': [{'nodeid': 1,
-        'depth': 1,
-        'split': 'worst_radius',
-        'split_condition': 17.6149998,
-        'yes': 3,
-        'no': 4,
-        'missing': 3,
-        'children': [{'nodeid': 3,
-          'depth': 2,
-          'split': 'area_error',
-          'split_condition': 35.2600021,
-          'yes': 7,
-          'no': 8,
-          'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.172745794},
-           {'nodeid': 8, 'leaf': 0.0501142256}]},
-         {'nodeid': 4,
-          'depth': 2,
-          'split': 'mean_texture',
-          'split_condition': 19.1650009,
-          'yes': 9,
-          'no': 10,
-          'missing': 9,
-          'children': [{'nodeid': 9, 'leaf': 0},
-           {'nodeid': 10, 'leaf': -0.129318759}]}]},
-       {'nodeid': 2,
-        'depth': 1,
-        'split': 'worst_perimeter',
-        'split_condition': 97.4900055,
-        'yes': 5,
-        'no': 6,
-        'missing': 5,
-        'children': [{'nodeid': 5, 'leaf': 0.0170257203},
-         {'nodeid': 6,
-          'depth': 2,
-          'split': 'area_error',
-          'split_condition': 21.9449997,
-          'yes': 11,
-          'no': 12,
-          'missing': 11,
-          'children': [{'nodeid': 11, 'leaf': -0.0499064028},
-           {'nodeid': 12, 'leaf': -0.173635662}]}]}]},
-     {'nodeid': 0,
-      'depth': 0,
-      'split': 'mean_concave_points',
-      'split_condition': 0.0489199981,
-      'yes': 1,
-      'no': 2,
-      'missing': 1,
-      'children': [{'nodeid': 1,
-        'depth': 1,
-        'split': 'area_error',
-        'split_condition': 42.1900024,
-        'yes': 3,
-        'no': 4,
-        'missing': 3,
-        'children': [{'nodeid': 3,
-          'depth': 2,
-          'split': 'worst_radius',
-          'split_condition': 17.2950001,
-          'yes': 7,
-          'no': 8,
-          'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.162387654},
-           {'nodeid': 8, 'leaf': 0.0214837175}]},
-         {'nodeid': 4, 'leaf': -0.0442601293}]},
-       {'nodeid': 2,
-        'depth': 1,
-        'split': 'worst_perimeter',
-        'split_condition': 104.100006,
-        'yes': 5,
-        'no': 6,
-        'missing': 5,
-        'children': [{'nodeid': 5,
-          'depth': 2,
-          'split': 'worst_concave_points',
-          'split_condition': 0.172450006,
-          'yes': 9,
-          'no': 10,
-          'missing': 10,
-          'children': [{'nodeid': 9, 'leaf': 0.122566067},
-           {'nodeid': 10, 'leaf': -0.107704416}]},
-         {'nodeid': 6,
-          'depth': 2,
-          'split': 'worst_concavity',
-          'split_condition': 0.222950011,
-          'yes': 11,
-          'no': 12,
-          'missing': 12,
-          'children': [{'nodeid': 11, 'leaf': 0.0192245375},
-           {'nodeid': 12, 'leaf': -0.161969319}]}]}]},
-     {'nodeid': 0,
-      'depth': 0,
-      'split': 'mean_concave_points',
-      'split_condition': 0.0489199981,
-      'yes': 1,
-      'no': 2,
-      'missing': 1,
-      'children': [{'nodeid': 1,
-        'depth': 1,
-        'split': 'area_error',
-        'split_condition': 42.1900024,
-        'yes': 3,
-        'no': 4,
-        'missing': 3,
-        'children': [{'nodeid': 3,
-          'depth': 2,
-          'split': 'worst_perimeter',
-          'split_condition': 113.75,
-          'yes': 7,
-          'no': 8,
-          'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.151806206},
-           {'nodeid': 8, 'leaf': 0.01741031}]},
-         {'nodeid': 4, 'leaf': -0.0412366688}]},
-       {'nodeid': 2,
-        'depth': 1,
-        'split': 'worst_perimeter',
-        'split_condition': 104.100006,
-        'yes': 5,
-        'no': 6,
-        'missing': 5,
-        'children': [{'nodeid': 5,
-          'depth': 2,
-          'split': 'worst_concave_points',
-          'split_condition': 0.172450006,
-          'yes': 9,
-          'no': 10,
-          'missing': 10,
-          'children': [{'nodeid': 9, 'leaf': 0.11439874},
-           {'nodeid': 10, 'leaf': -0.102243774}]},
-         {'nodeid': 6,
-          'depth': 2,
-          'split': 'mean_texture',
-          'split_condition': 67.1200027,
-          'yes': 11,
-          'no': 12,
-          'missing': 12,
-          'children': [{'nodeid': 11, 'leaf': -0.156740174},
-           {'nodeid': 12, 'leaf': -0.0323793478}]}]}]},
-     {'nodeid': 0,
-      'depth': 0,
-      'split': 'worst_concave_points',
-      'split_condition': 0.142349988,
-      'yes': 1,
-      'no': 2,
-      'missing': 1,
-      'children': [{'nodeid': 1,
-        'depth': 1,
-        'split': 'worst_perimeter',
-        'split_condition': 107.599998,
-        'yes': 3,
-        'no': 4,
-        'missing': 3,
-        'children': [{'nodeid': 3,
-          'depth': 2,
-          'split': 'area_error',
-          'split_condition': 46.7900009,
-          'yes': 7,
-          'no': 8,
-          'missing': 7,
-          'children': [{'nodeid': 7, 'leaf': 0.143411368},
-           {'nodeid': 8, 'leaf': 0.0141552528}]},
-         {'nodeid': 4,
-          'depth': 2,
-          'split': 'mean_texture',
-          'split_condition': 24.9850006,
-          'yes': 9,
-          'no': 10,
-          'missing': 10,
-          'children': [{'nodeid': 9, 'leaf': -0.0954347849},
-           {'nodeid': 10, 'leaf': 0.0930837914}]}]},
-       {'nodeid': 2,
-        'depth': 1,
-        'split': 'area_error',
-        'split_condition': 21.9449997,
-        'yes': 5,
-        'no': 6,
-        'missing': 5,
-        'children': [{'nodeid': 5,
-          'depth': 2,
-          'split': 'worst_texture',
-          'split_condition': 28.5450001,
-          'yes': 11,
-          'no': 12,
-          'missing': 11,
-          'children': [{'nodeid': 11, 'leaf': 0.0831701383},
-           {'nodeid': 12, 'leaf': -0.105434693}]},
-         {'nodeid': 6,
-          'depth': 2,
-          'split': 'concavity_error',
-          'split_condition': 0.113665,
-          'yes': 13,
-          'no': 14,
-          'missing': 14,
-          'children': [{'nodeid': 13, 'leaf': -0.146517023},
-           {'nodeid': 14, 'leaf': -0.00667759869}]}]}]}]
+    {'nodeid': 0,
+     'depth': 0,
+     'split': 'worst_concave_points',
+     'split_condition': 0.142349988,
+     'yes': 1,
+     'no': 2,
+     'missing': 1,
+     'children': [{'nodeid': 1,
+       'depth': 1,
+       'split': 'worst_radius',
+       'split_condition': 17.6149998,
+       'yes': 3,
+       'no': 4,
+       'missing': 3,
+       'children': [{'nodeid': 3,
+         'depth': 2,
+         'split': 'area_error',
+         'split_condition': 35.2600021,
+         'yes': 7,
+         'no': 8,
+         'missing': 7,
+         'children': [{'nodeid': 7, 'leaf': 0.189830512},
+          {'nodeid': 8, 'leaf': 0.0545454584}]},
+        {'nodeid': 4,
+         'depth': 2,
+         'split': 'mean_texture',
+         'split_condition': 19.1650009,
+         'yes': 9,
+         'no': 10,
+         'missing': 9,
+         'children': [{'nodeid': 9, 'leaf': 0},
+          {'nodeid': 10, 'leaf': -0.138461545}]}]},
+      {'nodeid': 2,
+       'depth': 1,
+       'split': 'worst_perimeter',
+       'split_condition': 97.4900055,
+       'yes': 5,
+       'no': 6,
+       'missing': 5,
+       'children': [{'nodeid': 5, 'leaf': 0.0181818195},
+        {'nodeid': 6,
+         'depth': 2,
+         'split': 'radius_error',
+         'split_condition': 5.74600077,
+         'yes': 11,
+         'no': 12,
+         'missing': 12,
+         'children': [{'nodeid': 11, 'leaf': -0.190400004},
+          {'nodeid': 12, 'leaf': -0.0545454584}]}]}]}
 
 
 
-The structure above is pretty simple. It consist of a `list` of python `dict`s, where each item of the list corresponds to a single tree. Each tree is composed of and initial node, and each node may have other nested nodes, that can be found under the `children` dictionary key. The keys: `split` and `split_condition`, are the feature-name and feature-value of the split condition respectively, the split value and condition is the node split you tipically find on trees diagrams of most tree-based methods. A final node, that has no further childre, correspond to a leaf node, that has a `leaf` value, which is some sort of a fraction of the models prediction score.
+As observed, each tree is composed of and initial node, and each node may have further nested nodes with can be found under the `children` key. 
 
-In the cell bellow, we illustrate the first tree by its tree diagram, where you can corroborate the correctness of the structure above.
+The keys: `split` and `split_condition`, are the feature-name and feature-value of the split condition respectively. A final node, that has no further childre, correspond to a leaf node and has a `leaf` value, which is some sort of a fraction of the models prediction score.
+
+Bellow, you can find the tree diagram, where you can corroborate the correctness of the structure above.
 
 
 ```python
+%matplotlib inline
+
 from xgboost import plot_tree
 import matplotlib.pyplot as plt
 
@@ -461,6 +271,10 @@ ax = plot_tree(
     The verbose.fileo rcparam was deprecated in Matplotlib 3.1 and will be removed in 3.3.
 
 
+
+![png](output_14_1.png)
+
+
 ## **Step 2**: Get model scores from the model json dump.
 
 In this section we describe two methods that will allow us to fetch model scores with pure python code.
@@ -477,24 +291,24 @@ import math
 def get_tree_leaf(node, x):
     """Get tree leaf score.
     
-    Each node contains childres that are composed of aditiona nodes.
+    Each node contains children that are composed of aditiona nodes.
     Final nodes with no children are the leaves.
     
     Parameters
     -----------
-    node: dict.
+    node: dict
         Node XGB dictionary.
-    x: dict.
+    x: dict
         Dictionary containing feature names and feature values.
     
     Return
     -------
-    score: float.
+    score: float
         Leaf score.
     """
 
     if 'leaf' in node:
-        # If the key leaf is found, the stop recurrency.
+        # If the leaf key is found, stop the recurrency.
         score = node['leaf']
         return score
     else:
@@ -512,27 +326,27 @@ def get_tree_leaf(node, x):
             # Split condition is false.
             next_node_id = node['no']
 
-        # Dig down to the next node.
+        # Get the next node.
         for children in node['children']:
             if children['nodeid'] == next_node_id:
                 return get_tree_leaf(children, x)
 
 
 def binary_predict_proba(x, model_json):
-    """Get score of a binary xgboost classifier.
+    """Get the score of a binary xgboost classifier.
     
     Parameters
     ----------
-    x: dict.
+    x: dict
         Dictionary containing feature names and feature values.
     
-    model_json: dict.
+    model_json: dict
         Dump of xgboost trees as json.
     
     Returns
     -------
     y_score: list
-        Scores of the negative and positve class.
+        Probability scores of the negative and positve class.
     """
     
     # Get tree leafs.
@@ -543,10 +357,10 @@ def binary_predict_proba(x, model_json):
             x=x)
         tree_leaf_scores.append(leaf_score)
 
-    # Get logits.
+    # Get logistic function logit.
     logit = sum(tree_leaf_scores)
     
-    # Compute logistic function
+    # Compute the logistic function
     pos_class_probability = 1 / (1 + math.exp(-logit))
 
     # Get negative and positive class probabilities.
@@ -555,7 +369,7 @@ def binary_predict_proba(x, model_json):
     return y_score
 ```
 
-And now, this simple lines of code show the scores obtained using pure python code and the model json dump.
+Using the functions above, we obtain the scores using pure python code and the model json dump:
 
 
 ```python
@@ -584,7 +398,7 @@ y_scores_json.head()
 
 
 
-The scores obtained manully and comparable to the scores obtained from the `xgboost.XGBClassifier` model, as shown bellow:
+The scores fetched manully are the same to the scores obtained from the `xgboost.XGBClassifier` model, as shown bellow:
 
 
 ```python
@@ -607,7 +421,7 @@ y_scores_model.head()
 
 
 
-Test the correctness of the score in the prescense of `NaN` values:
+Also, notice the correctness of the score in the presence of `NaN` values:
 
 
 ```python
@@ -720,7 +534,7 @@ model.predict_proba(x_nan)[0, 1]
 ## Conclusion
 In this section we have show how to create a XGBoost model, saved it as a JSON set of trees and how to get model probabilities scores using pure python code.
 
-# Step 3: Use Chalice to deploy your model.
+# Section 2: Use Chalice to deploy your model.
 
 In this section, we will use Chalice in order to deploy our serverless infrastructure in AWS. 
 
