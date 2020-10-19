@@ -536,11 +536,42 @@ In this section we have show how to create a XGBoost model, saved it as a JSON s
 
 # Section 2: Use Chalice to deploy your model.
 
-In this section, we will use Chalice in order to deploy our serverless infrastructure in AWS. 
+In this section, we will show how to deploy an XGBoost model to a serverless infraestructure, without the need to install any python package in the production environment.
 
-(NOTE: Explain what is Chalice)
+We will use AWS Lambda to run our custom python code, which returns model scores. The event that triggers the computation of the score is an http request, which contains in the body the features needed to compute the score.
 
-You will first need to set up your AWS credentials as shown in the following [link](https://chalice.readthedocs.io/en/stable/quickstart.html#credentials), if it is your first time using AWS, don't worry, you'll basically have to create an account and get some credentials in order for you being able to take control of the cloud solutions provided by AWS programatillay.
+The way we will interact with AWS Lambda will be through the framework: [Chalice](https://aws.github.io/chalice/), which is a framework for writing, testing, and deploying serverless applications to AWS.
+
+
+## Introduction
+
+The use of serverless technologies have multiple advantages, as explained by AWS:
+
+*Serverless applications don’t require provisioning, maintaining, and administering servers for backend components such as compute, databases, storage, stream processing, message queueing, and more. You also no longer need to worry about ensuring application fault tolerance and availability. Instead, AWS handles all of these capabilities for you. This allows you to focus on product innovation while enjoying faster time-to-market.*
+
+AWS provides multiple serveless services, in this tutorial we will only rely on *AWS Lambda*.:
+
+*AWS Lambda is a serverless compute service that runs your code in response to events and automatically manages the underlying compute resources for you.*
+
+The event that triggers the computation is an http request, which contains the features needed to compute the score. In terms of pricing, we will only be charged for the computing time we consume, making no charge when our code is not running.
+
+### What are the benefits of serverless?
+
+**No server management**
+There is no need to provision or maintain any servers. There is no software or runtime to install, maintain, or administer. 
+
+**Flexible scaling**
+Your application can be scaled automatically or by adjusting its capacity through toggling the units of consumption (e.g. throughput, memory) rather than units of individual servers.
+
+**Pay for value**
+Pay for consistent throughput or execution duration rather than by server unit.
+
+**Automated high availability**
+Serverless provides built-in availability and fault tolerance. You don't need to architect for these capabilities since the services running the application provide them by default.
+
+## Setup
+
+You will first need to set up your AWS credentials as shown in the following [link](https://chalice.readthedocs.io/en/stable/quickstart.html#credentials), if it is your first time using AWS, don't worry, you'll basically have to create an account and get some credentials in order for you being able to take control of the cloud solutions provided by AWS.
 
 Once your AWS account and your credentials are all in place, we will only need to:
 
@@ -564,25 +595,31 @@ Then install chalice package:
 
 ## Clone the repository.
 
-In this section we'll clone the chalice project that contains our XGboost model dump, and place the terminal under the folder `chalice_xgboost`:
+In this section we'll clone the chalice project that contains our XGboost model dump, and place the terminal under the folder `chalice_xgboost/chalice`:
 
 ``` 
 (chalice_xgboost) $ git clone git@github.com:RaulSanchezVazquez/chalice_xgboost.git
-(chalice_xgboost) $ cd chalice_xgboost
+(chalice_xgboost) $ cd chalice_xgboost/chalice
 ```
 
-(NOTE: Explain the folders)
+The chalice folder contains the following files and folders:
 ```
-(chalice_xgboost) chalice_xgboost $ ls
+(chalice_xgboost) chalice $ ls
 README.ipynb README.md    app.py       chalicelib   models
 ```
+
+The folder `/models` contain any artifacts you generate while training, in this particular case, the model JSON dump: `models/xgb.json`.
+
+Other utility scripts, such as the custom code we write in previous sections, that allow us to fech model scores, are placed under the `/chalicelib` folder.
+
+The `app.py` is the main file that contains the main logic and the exposure of the endpoints, which we will go in more details in the next section.
 
 ## Local test and deploy to production.
 
 Run locally the server:
 
 ```
-(chalice_xgboost) chalice_xgboost $ chalice local
+(chalice_xgboost) chalice $ chalice local
 Serving on http://127.0.0.1:8000
 ```
 
@@ -590,6 +627,36 @@ The `app.py` file
 
 
 ```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import time
+
+from chalice import Chalice
+
+from chalicelib import config
+from chalicelib import log
+from chalicelib import model
+from chalicelib import xgb
+
+
+# Create the chalice app.
+app = Chalice(app_name='kpay_fraud_service')
+
+# Initialize the logger.
+log.init()
+
+
+# Index.
+@app.route('/')
+def index():
+    """Get model version
+    """
+    response = {'version': config.VERSION}
+    log.LOGGER_.info('Response: %s' % response)
+
+    return response
+
+
 # Get model score.
 @app.route('/predict_proba', methods=['POST'])
 def get_decision():
